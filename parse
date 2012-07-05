@@ -1,0 +1,55 @@
+#!/bin/bash
+#NickG
+#Script for processing a specific catalog into CSV
+#Usage: ./parse [input] [output]
+
+#Error messages for incorrect arguments
+if [ $# -ne 2 ]; then
+	echo "Usage: $0 [input] [output]"
+	exit 0
+fi
+
+#Error if input is not a file
+if [ ! -e $1 ]; then
+	echo "$1 is not a file"
+	exit 0
+fi
+
+#Set up named variables for convenience
+INPUT=$1
+OUTPUT=$2
+
+#Create a template
+echo -e "productid,manufacturer,name,finish/color,price,description,extra\n" > ${OUTPUT}
+
+#Initialize LINENUM so it doesn't break
+LINENUM=1
+
+#Create some functions for my sanity
+
+#Reads the line that LINENUM is currently at into LINE
+readline() {
+	LINE=`sed -n ${LINENUM}p ${INPUT}`
+	}
+
+#Echoes the contents of LINE to stdout
+echoline() {
+	echo ${LINE}
+	}
+
+#Moves the LINENUM a number of lines
+movup() {
+	LINENUM=`expr $LINENUM + $1`
+	}
+
+#Moves the LINENUM down a number of lines
+movdown() {
+	LINENUM=`expr $LINENUM - $1`
+	}
+
+readline
+echoline
+
+movup 1
+readline
+echoline
