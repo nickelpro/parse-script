@@ -3,53 +3,186 @@
 #Script for processing a specific catalog into CSV
 #Usage: ./parse [input] [output]
 
+###########################################################
+#           Input Checking and some Misc.                 #
+###########################################################
+
+
 #Error messages for incorrect arguments
 if [ $# -ne 2 ]; then
 	echo "Usage: $0 [input] [output]"
 	exit 0
-fi
+	fi
 
 #Error if input is not a file
 if [ ! -e $1 ]; then
 	echo "$1 is not a file"
 	exit 0
-fi
+	fi
 
 #Set up named variables for convenience
 INPUT=$1
 OUTPUT=$2
 
 #Create a template
-echo -e "productid,manufacturer,name,finish/color,price,description,extra\n" > ${OUTPUT}
+echo -e "productid,manufacturer,name,finish/color,price,description,extra,image\n" > ${OUTPUT}
 
 #Initialize LINENUM so it doesn't break
-LINENUM=1
+LINENUM=0
 
-#Create some functions for my sanity
+###########################################################
+#                                                         #
+#                                                         #
+#              Functions start here                       #
+#       A lot of these functions are really               #
+#       simple and are for my own sanity so               #
+#       I don't have to remember random sed               #
+#       switches and whatnot. Some of them                #
+#       use a litte magic, or things I don't              #
+#       understand.                                       #
+#                                                         #
+###########################################################
+
+
 
 #Reads the line that LINENUM is currently at into LINE
 readline() {
 	LINE=`sed -n ${LINENUM}p ${INPUT}`
 	}
 
-#Echoes the contents of LINE to stdout
+#Echoes the contents of LINE
 echoline() {
+	readline
 	echo ${LINE}
 	}
 
 #Moves the LINENUM a number of lines
-movup() {
+movdown() {
 	LINENUM=`expr $LINENUM + $1`
 	}
 
-#Moves the LINENUM down a number of lines
-movdown() {
+#Moves the LINENUM down a number of lines, ie. up the page (shut up it makes
+#sense to me)
+movup() {
 	LINENUM=`expr $LINENUM - $1`
 	}
 
-readline
-echoline
+#Extracts the relevant info from a product line
+#I'm awful at regex, so HACKS!!! HACKS EVERYWHERE!!!!
+extractproduct() {
+	readline
+	#Break the line into an array
+	TOKENS=( $LINE )
+	#Get the size of the arry
+	TOKENNUM=`expr ${#TOKENS[*]} - 1`
+	#The product ID is always the first element
+	PRODUCTID=${TOKENS[0]}
+	#Price is always the last token, the regex cuts out any "$" symbols
+	PRICE=${TOKENS[${TOKENNUM}]}
+	PRICE=`echo ${PRICE} | sed 's/\\$//g'`
+	#A loop the extract all the stuff between the two
+	COUNTER=2
+	if [ 1 -lt ${TOKENNUM} ]; then
+		FINISH=${TOKENS[1]}
+		while [ ${COUNTER} -lt ${TOKENNUM} ]; do
+			FINISH=${FINISH}" "${TOKENS[${COUNTER}]}
+			let COUNTER=COUNTER+1 
+			done
+		fi
+	#Remove the exotic ® character
+	FINISH=`echo ${FINISH} | sed 's/®//g'`
+	}
 
-movup 1
-readline
-echoline
+#Gets the fancy stuff, name, description, and extra
+#Only needs to be run once for a product set
+extractmore() {
+	readline
+	#Extracting the description is similar to extracting basic product info
+	TOKENS=( $LINE )
+	until [ ${TOKENS[0]} == "•" ]; do
+		movdown 1
+		readline
+		TOKENS=( $LINE )
+		done
+	while [  ${TOKENS[0]} == "•" ]; do
+		DESCRIPTION=${DESCRIPTION}"-"${LINE}
+		movdown 1
+		readline
+		TOKENS=( $LINE )
+		done
+	TEMPNUM=${LINENUM} 
+
+	#Remove the fancy "•" and commas that could break the CSV
+	DESCRIPTION=`echo ${DESCRIPTION} | sed 's/• //g'`
+	DESCRIPTION=`echo ${DESCRIPTION} | sed 's/,//g'`
+	
+	#Similar to scanforproduct, except with some extra conditions, this is
+	#for finding the product's name
+	until [[ ${TOKENS[0]} == "No." ||  ${TOKENS[0]} != *[!0-9]* ]]; do
+		movdown 1
+		readline
+		TOKENS=( $LINE )
+		done
+	
+	#Grab and clean the product name
+	movup 1
+	readline	
+	NAME=${LINE}
+	NAME=`echo ${NAME} | sed 's/®//g'`
+	NAME=`echo ${NAME} | sed 's/™//g'`
+
+	#Grab us anything in between the product name and the description
+	while [ ${TEMPNUM} -lt ${LINENUM} ]; do
+		movup 1
+		readline
+		EXTRA=${EXTRA}"-"${LINE}
+		done
+	}
+
+#Scans for the next product and moves the LINENUM down to the first Product ID
+scanforproduct() {
+	TPRODUCTS=0
+	until [[ ${LINE} == "No. Finish List Price" ||  ${LINE} == "No. Color List Price" ]]; do
+		movdown 1
+		readline
+		done
+	fPRODUCT=`expr ${LINENUM} + 1`
+	TOKENS=( $LINE )
+	until [ ${TOKENS[0]} == "•" ]; do
+		movdown 1
+		readline
+		TOKENS=( $LINE )
+		let TPRODUCTS=TPRODUCTS+1
+		done
+	let TPRODUCTS=TPRODUCTS-1
+	LINENUM=${fPRODUCT}
+	}
+
+#Pushes the extracted product info to output
+OUTPUTCOUNT=2
+pushproduct() {
+	sed -i -e 2i\ "${PRODUCTID},manufacturer,${NAME},${FINISH},${PRICE},${DESCRIPTION},${EXTRA},image" ${OUTPUT}
+	let OUTPUTCOUNTER=OUTPUTCOUNTER+1
+	}
+
+clearproduct() {
+	PRODUCTID=""; NAME=""; FINISH=""; PRICE=""; DESCRIPTION=""; EXTRA=""
+	}
+
+while [ ${LINENUM} -lt 10000 ]; do
+	scanforproduct
+	extractproduct
+	extractmore
+	pushproduct
+	let TPRODUCTS=TPRODUCTS-1
+	while [ ${TPRODUCTS} -gt 0 ]; do
+		let TPRODUCTS=TPRODUCTS-1
+		let fPRODUCT=fPRODUCT+1
+		LINENUM=${fPRODUCT}
+		extractproduct
+		pushproduct
+		done
+	clearproduct
+	done
+		
+
