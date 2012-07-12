@@ -1,6 +1,6 @@
 #!/bin/bash
 #NickG
-#Script for processing a specific catalog into CSV
+#Script for processing a specific catalog into CSVs
 #Usage: ./parse [input] [output]
 
 ###########################################################
@@ -104,18 +104,26 @@ extractmore() {
 		readline
 		TOKENS=( $LINE )
 		done
-	while [  ${TOKENS[0]} == "•" ]; do
+	while [[  ${TOKENS[0]} == "•" || ${NEXTTOKEN[0]} == "•" ]]; do
 		DESCRIPTION=${DESCRIPTION}"-"${LINE}
 		movdown 1
 		readline
 		TOKENS=( $LINE )
+		movdown 1
+		readline
+		NEXTTOKEN=( $LINE )
+		movup 1
 		done
 	TEMPNUM=${LINENUM} 
 
-	#Remove the fancy "•" and commas that could break the CSV
+	#Remove the fancy characters and commas that could break the CSV
 	DESCRIPTION=`echo ${DESCRIPTION} | sed 's/• //g'`
 	DESCRIPTION=`echo ${DESCRIPTION} | sed 's/,//g'`
-	
+	DESCRIPTION=`echo ${DESCRIPTION} | sed 's/™//g'`
+	DESCRIPTION=`echo ${DESCRIPTION} | sed 's/®//g'`
+	DESCRIPTION=`echo ${DESCRIPTION} | sed 's/”/"/g'`
+	DESCRIPTION=`echo ${DESCRIPTION} | sed 's/°/degrees/g'`
+		
 	#Similar to scanforproduct, except with some extra conditions, this is
 	#for finding the product's name
 	until [[ ${TOKENS[0]} == "No." ||  ${TOKENS[0]} != *[!0-9]* ]]; do
@@ -135,6 +143,8 @@ extractmore() {
 	while [ ${TEMPNUM} -lt ${LINENUM} ]; do
 		movup 1
 		readline
+		LINE=`echo ${LINE} | sed 's/-//g'`
+		LINE=`echo ${LINE} | sed 's/,//g'`
 		EXTRA=${EXTRA}"-"${LINE}
 		done
 	}
@@ -159,15 +169,21 @@ scanforproduct() {
 	}
 
 #Pushes the extracted product info to output
-OUTPUTCOUNT=2
+OUTPUTCOUNTER=2
 pushproduct() {
-	sed -i -e 2i\ "${PRODUCTID},manufacturer,${NAME},${FINISH},${PRICE},${DESCRIPTION},${EXTRA},image" ${OUTPUT}
+	sed -i -e ${OUTPUTCOUNTER}i\ "${PRODUCTID},manufacturer,${NAME},${FINISH},${PRICE},${DESCRIPTION},${EXTRA},image" ${OUTPUT}
 	let OUTPUTCOUNTER=OUTPUTCOUNTER+1
 	}
 
 clearproduct() {
 	PRODUCTID=""; NAME=""; FINISH=""; PRICE=""; DESCRIPTION=""; EXTRA=""
 	}
+
+###########################################################
+#                                                         #
+#                Main Program Loop                        #
+#                                                         #
+###########################################################
 
 while [ ${LINENUM} -lt 10000 ]; do
 	scanforproduct
@@ -184,5 +200,4 @@ while [ ${LINENUM} -lt 10000 ]; do
 		done
 	clearproduct
 	done
-		
 
